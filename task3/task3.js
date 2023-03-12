@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const csvjson = require('csvjson');
-const request = require('request');
+const axios = require('axios');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 var data = fs.readFileSync(path.join(__dirname, '../CEPs.csv'), { encoding : 'utf8'});
@@ -14,15 +14,12 @@ var options = {
 const array = csvjson.toObject(data, options);
 
 function validarCep(cep) {
-    // Remove qualquer caractere que não seja um número
     cep = cep.replace(/\D/g, '');
 
-    // Verifica se o CEP tem 8 dígitos
     if (cep.length !== 8) {
         return false;
     }
 
-    // Verifica se o CEP é composto apenas por números repetidos
     const repetido = new RegExp('^' + cep[0] + '{8}$');
     if (repetido.test(cep)) {
         return false;
@@ -31,29 +28,45 @@ function validarCep(cep) {
     return true;
 }
 
-// let multipliedArray = [];
-// array.forEach(element => {
-//     multipliedArray.push({
-//         Local: element.Local,
-//         Population: parseInt(element.Population)
-//     })
-// })
+arrayWithValidatedCEPs = [];
+array.forEach(element => {
+    const validarCEP = validarCep(element.CEP)
+    if (validarCEP === true) {
+        arrayWithValidatedCEPs.push(
+            element.CEP.replace(/\D/g, ''),
+        )
+    }
+})
 
-// request('https://viacep.com.br/', function (error, response, body) {
-//     if (!error && response.statusCode == 200) {
-//         console.log(body) // Print the google web page.
-//     }
-// })
+let cepsResponse = []
+async function getData(urls) {
+    const requests = urls.map(url => axios.get(`https://viacep.com.br/ws/${url}/json/`));
+    const responses = await Promise.all(requests);
+    const data = responses.map(response => response.data);
+    return data;
+}
 
-// const csvWriter = createCsvWriter({
-//     path: './newMapa.csv',
-//     header: [
-//         {id: 'Local', title: 'Local'},
-//         {id: 'Population', title: 'População no último censo'}
-//     ],
-//     fieldDelimiter: ';'
-// });
+(async () => {
+    const cepsResponse = await getData(arrayWithValidatedCEPs);
 
-// csvWriter
-//     .writeRecords(sortedArray)
-//     .then(() => console.log('Arquivo CSV criado com sucesso'));
+    const csvWriter = createCsvWriter({
+        path: './newCEPs.csv',
+        header: [
+            {id: 'cep', title: 'CEP'},
+            {id: 'logradouro', title: 'Logradouro'},
+            {id: 'complemento', title: 'Complemento'},
+            {id: 'bairro', title: 'Bairro'},
+            {id: 'localidade', title: 'Localidade'},
+            {id: 'uf', title: 'UF'},
+            {id: 'Unidade', title: 'Unidade'},
+            {id: 'ibge', title: 'IBGE'},
+            {id: 'gia', title: 'GIA'}
+        ],
+        fieldDelimiter: ';'
+    });
+    
+    csvWriter
+        .writeRecords(cepsResponse)
+        .then(() => console.log('Arquivo CSV criado com sucesso'));
+})();
+
